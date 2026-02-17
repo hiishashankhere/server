@@ -26,6 +26,14 @@ export const stripeWebhook = async (request, response) => {
                 const { transactionId, appId } = session.metadata;
 
                 if (appId === "social-profile-marketplace" && transactionId) {
+                    const existingTransaction = await prisma.transaction.findUnique({
+                        where: { id: transactionId },
+                    });
+
+                    if (!existingTransaction) {
+                        return response.status(404).json({ message: "Transaction not found" });
+                    }
+
                     const transaction = await prisma.transaction.update({
                         where: { id: transactionId },
                         data: { isPaid: true },

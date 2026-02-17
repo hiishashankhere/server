@@ -29,8 +29,7 @@ export const getChat = async (req, res) => {
         }
 
         if (existingChat) {
-            res.json({ chat: existingChat });
-            if (existingChat.isLastMessageRead === false) {
+            if (existingChat.isLastMessageRead === false && existingChat.messages.length > 0) {
                 const lastMessage = existingChat.messages[existingChat.messages.length - 1];
                 const isLastMessageSendByMe = lastMessage.sender_id === userId;
 
@@ -41,7 +40,7 @@ export const getChat = async (req, res) => {
                     });
                 }
             }
-            return null;
+            return res.json({ chat: existingChat });
         }
 
         const newChat = await prisma.chat.create({

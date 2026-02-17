@@ -20,7 +20,7 @@ export const getDashboard = async (req, res) => {
             select: { amount: true },
         });
 
-        const totalRevenue = transactions.reduce((total, transaction) => total + transaction.amount, 0);
+        const totalRevenue = (transactions || []).reduce((total, transaction) => total + transaction.amount, 0);
 
         const activeListings = await prisma.listing.count({
             where: { status: "active" },
@@ -221,7 +221,7 @@ export const getAllWithdrawRequests = async (req, res) => {
     try {
         const requests = await prisma.withdrawal.findMany({
             orderBy: { createdAt: "asc" },
-            include:{ user: true }
+            include: { user: true }
         });
 
         if (!requests || requests.length === 0) {

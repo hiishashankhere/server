@@ -3,6 +3,7 @@ import imagekit from "../configs/imagekit.js";
 import prisma from "../configs/prisma.js";
 import Stripe from "stripe";
 import { inngest } from "../inngest/index.js";
+import { clerkClient } from "@clerk/express";
 
 // Controller For Adding Listing to Database
 export const addListing = async (req, res) => {
@@ -83,31 +84,61 @@ export const getAllPublicListing = async (req, res) => {
 // Controller For Getting All User Listing
 export const getAllUserListing = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        console.log("getAllUserListing: Starting...");
+        const auth = await req.auth();
+        const userId = auth.userId;
+        console.log("getAllUserListing: Authenticated User ID:", userId);
 
         // get all listings except deleted
+        console.log("getAllUserListing: Fetching listings...");
         const listings = await prisma.listing.findMany({
             where: { ownerId: userId, status: { not: "deleted" } },
             orderBy: { createdAt: "desc" },
         });
+        console.log(`getAllUserListing: Found ${listings.length} listings`);
 
+        console.log("getAllUserListing: Fetching user...");
         const user = await prisma.user.findUnique({
             where: { id: userId },
         });
+        console.log("getAllUserListing: User found:", user ? "Yes" : "No");
+
+        if (!user) {
+            console.log("getAllUserListing: User not found in DB, attempting Lazy Sync fallback...");
+            try {
+                const clerkUser = await clerkClient.users.getUser(userId);
+                console.log("getAllUserListing: Clerk User fetched:", clerkUser.id);
+
+                user = await prisma.user.create({
+                    data: {
+                        id: userId,
+                        email: clerkUser.emailAddresses[0].emailAddress,
+                        name: (clerkUser.firstName || "") + " " + (clerkUser.lastName || ""),
+                        image: clerkUser.imageUrl,
+                    },
+                });
+                console.log("getAllUserListing: User created in DB via fallback");
+            } catch (error) {
+                console.error("getAllUserListing: Fallback failed:", error);
+                return res.status(404).json({ message: "User not found and creation failed" });
+            }
+        }
 
         const balance = {
             earned: user.earned,
             withdrawn: user.withdrawn,
             available: user.earned - user.withdrawn,
         };
+        console.log("getAllUserListing: Balance calculated:", balance);
 
         if (!listings || listings.length === 0) {
             return res.json({ listings: [], balance });
         }
 
+        console.log("getAllUserListing: Sending response");
         return res.json({ listings, balance });
     } catch (error) {
-        console.log(error);
+        console.error("getAllUserListing Error:", error);
         res.status(500).json({ message: error.code || error.message });
     }
 };
