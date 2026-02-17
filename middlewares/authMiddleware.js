@@ -3,9 +3,13 @@ import prisma from "../configs/prisma.js";
 
 export const protect = async (req, res, next) => {
     try {
-        const authData = await req.auth();
+        const authData = req.auth;
+        if (!authData) {
+            console.log("Protect Middleware - No authData found (req.auth is undefined)");
+            return res.status(401).json({ message: "Unauthorized: No Auth Data" });
+        }
         const { userId, has } = authData;
-        console.log("Protect Middleware - AuthData:", { userId, hasPremium: await has({ plan: 'premium' }) });
+        console.log("Protect Middleware - AuthData:", { userId, hasPremium: has({ plan: 'premium' }) });
 
         if (!userId) {
             console.log("Protect Middleware - No UserId found");
@@ -34,14 +38,12 @@ export const protect = async (req, res, next) => {
                 console.log("Protect Middleware - User created in DB");
             } catch (clerkError) {
                 console.error("Protect Middleware - Clerk/DB Error:", clerkError);
-                // Don't block the request if user sync fails, but log it. 
-                // However, listingController might depend on user existence.
-                // For now, let's catch and throw to the main catcher to see the error.
-                throw clerkError;
+                // Don't block the request if user sync fails. 
+                // The controller has its own fallback logic now.
             }
         }
 
-        const hasPremiumPlan = await has({ plan: 'premium' });
+        const hasPremiumPlan = has({ plan: 'premium' });
         req.plan = hasPremiumPlan ? 'premium' : 'free';
 
         return next();
@@ -53,7 +55,7 @@ export const protect = async (req, res, next) => {
 
 export const protectAdmin = async (req, res, next) => {
     try {
-        const user = await clerkClient.users.getUser(await req.auth().userId);
+        const user = await clerkClient.users.getUser(req.auth.userId);
 
         const isAdmin = process.env.ADMIN_EMAILS.split(",").includes(user.emailAddresses[0].emailAddress);
 

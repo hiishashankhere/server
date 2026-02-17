@@ -12,12 +12,18 @@ import { stripeWebhook } from "./controllers/stripeWebhook.js";
 const app = express();
 
 // Stripe Webhooks Route
-app.use('/api/stripe', express.raw({type: 'application/json'}), stripeWebhook)
+app.use('/api/stripe', express.raw({ type: 'application/json' }), stripeWebhook)
 
 // Middlewares
 app.use(express.json());
 app.use(cors());
 app.use(clerkMiddleware());
+
+app.use((req, res, next) => {
+    console.log(`Global Debug: ${req.method} ${req.url}`);
+    console.log("Global Debug: req.auth:", req.auth);
+    next();
+});
 
 app.get("/", (req, res) => res.send("Server is live!"));
 

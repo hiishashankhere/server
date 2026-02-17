@@ -8,7 +8,7 @@ import { clerkClient } from "@clerk/express";
 // Controller For Adding Listing to Database
 export const addListing = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
 
         if (req.plan !== "premium") {
             const listingCount = await prisma.listing.count({
@@ -16,6 +16,27 @@ export const addListing = async (req, res) => {
             });
             if (listingCount >= 5) {
                 return res.status(400).json({ message: "you have reached the free listing limit" });
+            }
+        }
+
+        // Ensure user exists in DB before creating listing (Lazy Sync Fallback)
+        let user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            console.log("addListing: User not found in DB, attempting Lazy Sync fallback...");
+            try {
+                const clerkUser = await clerkClient.users.getUser(userId);
+                await prisma.user.create({
+                    data: {
+                        id: userId,
+                        email: clerkUser.emailAddresses[0].emailAddress,
+                        name: (clerkUser.firstName || "") + " " + (clerkUser.lastName || ""),
+                        image: clerkUser.imageUrl,
+                    },
+                });
+                console.log("addListing: User created in DB via fallback");
+            } catch (error) {
+                console.error("addListing: Fallback failed:", error);
+                return res.status(500).json({ message: "Failed to sync user data" });
             }
         }
 
@@ -45,7 +66,7 @@ export const addListing = async (req, res) => {
 
         // Wait for all uploads to complete
         const images = await Promise.all(uploadImages);
-
+        console.log(images, '\images')
         const listing = await prisma.listing.create({
             data: {
                 ownerId: userId,
@@ -85,7 +106,7 @@ export const getAllPublicListing = async (req, res) => {
 export const getAllUserListing = async (req, res) => {
     try {
         console.log("getAllUserListing: Starting...");
-        const auth = await req.auth();
+        const auth = req.auth;
         const userId = auth.userId;
         console.log("getAllUserListing: Authenticated User ID:", userId);
 
@@ -98,7 +119,7 @@ export const getAllUserListing = async (req, res) => {
         console.log(`getAllUserListing: Found ${listings.length} listings`);
 
         console.log("getAllUserListing: Fetching user...");
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id: userId },
         });
         console.log("getAllUserListing: User found:", user ? "Yes" : "No");
@@ -125,7 +146,7 @@ export const getAllUserListing = async (req, res) => {
         }
 
         const balance = {
-            earned: user.earned,
+            earned: user?.earned,
             withdrawn: user.withdrawn,
             available: user.earned - user.withdrawn,
         };
@@ -146,7 +167,7 @@ export const getAllUserListing = async (req, res) => {
 // Controller For Updating Listing in Database
 export const updateListing = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
         const accountDetails = JSON.parse(req.body.accountDetails);
 
         if (req.files.length + accountDetails.images.length > 5) {
@@ -212,7 +233,7 @@ export const updateListing = async (req, res) => {
 export const toggleStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
 
         const listing = await prisma.listing.findUnique({
             where: { id, ownerId: userId },
@@ -243,7 +264,7 @@ export const toggleStatus = async (req, res) => {
 // Controller For Deleting Listing
 export const deleteUserListing = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
         const { listingId } = req.params;
 
         const listing = await prisma.listing.findFirst({
@@ -281,7 +302,7 @@ export const deleteUserListing = async (req, res) => {
 
 export const addCredential = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
 
         const { listingId, credential } = req.body;
 
@@ -318,7 +339,7 @@ export const addCredential = async (req, res) => {
 
 export const purchaseAccount = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
         const { listingId } = req.params;
         const { origin } = req.headers;
 
@@ -381,7 +402,7 @@ export const purchaseAccount = async (req, res) => {
 export const markFeatured = async (req, res) => {
     try {
         const { id } = req.params;
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
 
         if (req.plan !== "premium") {
             return res.status(400).json({ message: "Premium plan required" });
@@ -408,7 +429,7 @@ export const markFeatured = async (req, res) => {
 
 export const getAllUserOrders = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
 
         let orders = await prisma.transaction.findMany({
             where: { userId, isPaid: true },
@@ -438,12 +459,16 @@ export const getAllUserOrders = async (req, res) => {
 
 export const withdrawAmount = async (req, res) => {
     try {
-        const { userId } = await req.auth();
+        const { userId } = req.auth;
         const { amount, account } = req.body;
 
         const user = await prisma.user.findUnique({
             where: { id: userId },
         });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
 
         const balance = user.earned - user.withdrawn;
 
