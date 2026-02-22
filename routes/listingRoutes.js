@@ -2,6 +2,9 @@ import express from "express";
 import { protect } from "../middlewares/authMiddleware.js";
 import { addCredential, addListing, deleteUserListing, getAllPublicListing, getAllUserListing, getAllUserOrders, markFeatured, purchaseAccount, toggleStatus, updateListing, withdrawAmount } from "../controllers/listingController.js";
 import upload from "../configs/multer.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 const listingRouter = express.Router();
 

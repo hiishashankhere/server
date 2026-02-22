@@ -1,4 +1,7 @@
 import prisma from "../configs/prisma.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 // Controller for checking if user is admin
 export const isAdmin = async (req, res) => {
